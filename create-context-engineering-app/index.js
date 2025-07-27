@@ -63,6 +63,7 @@ fs.copySync(
   path.join(templateDir, "examples"),
   path.join(projectDir, "examples")
 );
+
 if (argv.llm === "CLAUDE") {
   fs.copySync(
     path.join(templateDir, "CLAUDE.md"),
@@ -113,14 +114,22 @@ const langRulesPath = path.join(templateDir, "Rules", `${lang}.md`);
 
 if (fs.existsSync(langRulesPath)) {
   const langRulesContent = fs.readFileSync(langRulesPath, "utf8");
+
   if (argv.llm === "GEMINI") {
-    fs.writeFileSync(langRulesPath, geminiRulesPath);
+    fs.writeFileSync(geminiRulesPath, langRulesContent);
   } else {
-    fs.writeFileSync(langRulesPath, claudeRulesPath);
+    fs.writeFileSync(claudeRulesPath, langRulesContent);
   }
 }
 
 fs.mkdirSync(path.join(projectDir, projectName));
+
+const templatesDir = path.join(projectDir, ".context", "templates");
+fs.readdirSync(templatesDir).forEach((file) => {
+  if (file !== "prp_template.md") {
+    fs.removeSync(path.join(templatesDir, file));
+  }
+});
 
 execSync("git init", { cwd: path.join(projectDir, projectName) });
 
