@@ -1,109 +1,77 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -eo pipefail
 
-# ---
-# generate-prp.sh (v2)
-#
-# Description:
-#   Generates a PRP by sending a feature request and a strict template
-#   directly to the Gemini API.
-# ---
-
-# 1. Validate Input & Environment
-# --------------------------------
-if [ -z "$GEMINI_API_KEY" ]; then
-  echo "Error: GEMINI_API_KEY environment variable is not set."
+if ! command -v gemini &> /dev/null; then
+  echo "Error: gemini CLI not installed. Install with npm or npx."
   exit 1
 fi
+
 if ! command -v jq &> /dev/null; then
-    echo "Error: jq is not installed. Please install it."
-    exit 1
+  echo "Error: jq is not installed."
+  exit 1
 fi
+
 if [ -z "$1" ]; then
-  echo "Error: No feature file specified."
+  echo "Usage: $0 <feature-request.md>"
   exit 1
 fi
 
-FEATURE_FILE_PATH=$1
-TEMPLATE_FILE_PATH=".gemini/templates/prp_template.md"
+FEATURE_FILE="$1"
+TEMPLATE_FILE=".gemini/templates/prp_template.md"
 
-if [ ! -f "$FEATURE_FILE_PATH" ]; then
-  echo "Error: Feature file '$FEATURE_FILE_PATH' not found."
-  exit 1
-fi
-if [ ! -f "$TEMPLATE_FILE_PATH" ]; then
-  echo "Error: Template file '$TEMPLATE_FILE_PATH' not found."
-  exit 1
-fi
+for f in "$FEATURE_FILE" "$TEMPLATE_FILE"; do
+  if [ ! -f "$f" ]; then
+    echo "Error: Required file '$f' not found."
+    exit 1
+  fi
+done
 
-# 2. Define Prompts and Read Content
-# -----------------------------------
-# This is a much stricter and more explicit prompt.
-GENERATE_PRP_PROMPT=$(cat <<'END_PROMPT'
+# 2. Read Content
+GENERATE_PRP_PROMPT=$(cat <<'EOF'
 You are an expert-level AI software engineer. Your task is to generate a complete Product Requirements Prompt (PRP) based on the provided user request.
 
 **Your output MUST strictly follow the structure and use the exact headings from the template provided below.** Do not invent your own headings or sections. You must fill out every section of the template: `1. Overview`, `2. Success Criteria`, `3. Context & Resources`, `4. Implementation Blueprint`, and `5. Validation Plan`.
 
 Your final output must be ONLY the completed PRP markdown content. Do not include any other text.
-END_PROMPT
+EOF
 )
 
-# Read the content of the template and the user's request
-TEMPLATE_CONTENT=$(cat "$TEMPLATE_FILE_PATH")
-FEATURE_REQUEST_CONTENT=$(cat "$FEATURE_FILE_PATH")
+TEMPLATE_CONTENT=$(< "$TEMPLATE_FILE")
+FEATURE_REQUEST=$(< "$FEATURE_FILE")
 
-# 3. Prepare and Execute API Call
-# -------------------------------
-echo "✅ Preparing prompt for Gemini..."
-echo "✅ Contacting the Gemini API... (This may take a moment)"
+# 3. Construct combined prompt
+COMBINED_PROMPT="${GENERATE_PRP_PROMPT}
 
-# Construct the JSON payload, injecting the template directly into the prompt.
-JSON_PAYLOAD=$(jq -n \
-                  --arg prompt "$GENERATE_PRP_PROMPT" \
-                  --arg template "$TEMPLATE_CONTENT" \
-                  --arg request "$FEATURE_REQUEST_CONTENT" \
-                  '{
-                    "contents": [
-                      {
-                        "parts": [
-                          {
-                            "text": "\($prompt)\n\n--- TEMPLATE TO FOLLOW ---\n\($template)\n\n--- USER REQUEST ---\n\($request)"
-                          }
-                        ]
-                      }
-                    ]
-                  }')
+--- TEMPLATE TO FOLLOW ---
+${TEMPLATE_CONTENT}
 
-# Make the API call using curl
-API_RESPONSE=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}" \
--H "Content-Type: application/json" \
--d "$JSON_PAYLOAD")
+--- USER REQUEST ---
+${FEATURE_REQUEST}"
 
-# 4. Parse the Response and Handle Errors
-# ---------------------------------------
-if [ -z "$API_RESPONSE" ]; then
-    echo "Error: Received an empty response from the API."
-    exit 1
+echo "$COMBINED_PROMPT"
+
+echo "✅ Invoking Gemini CLI non-interactively..."
+
+# 4. Run via Gemini CLI
+RESPONSE_TEXT=$(gemini -p "$COMBINED_PROMPT" --model gemini-2.5-flash)
+
+# 5. Extract output
+PRP_CONTENT="$RESPONSE_TEXT"
+
+echo "$PRP_CONTENT"
+
+if [ -z "$PRP_CONTENT" ] || [ "$PRP_CONTENT" = "null" ]; then
+  echo "Error: No content from Gemini CLI."
+  echo "Full response: $RESPONSE_JSON"
+  exit 1
 fi
 
-PRP_CONTENT=$(echo "$API_RESPONSE" | jq -r '.candidates[0].content.parts[0].text')
-
-if [ -z "$PRP_CONTENT" ] || [ "$PRP_CONTENT" == "null" ]; then
-    echo "Error: Could not extract content from the API response."
-    echo "Full API Response:"
-    echo "$API_RESPONSE"
-    exit 1
-fi
-
-# 5. Save the Output
-# ------------------
+# 6. Save resulting PRP
 mkdir -p PRPs
+BASE=$(basename "$FEATURE_FILE" .md | tr '[:upper:]' '[:lower:]')
+OUTPUT="PRPs/${BASE}_prp_v2.md"
 
-BASENAME=$(basename "$FEATURE_FILE_PATH" .md | tr '[:upper:]' '[:lower:]')
-# Add a suffix to distinguish this new PRP
-OUTPUT_FILE="PRPs/${BASENAME}_prp_v2.md"
-
-echo "$PRP_CONTENT" > "$OUTPUT_FILE"
+printf "%s\n" "$PRP_CONTENT" > "$OUTPUT"
 
 echo "------------------------------------------------------------------"
-echo "✅ Success! PRP generated by Gemini and saved to: $OUTPUT_FILE"
-echo "------------------------------------------------------------------"
+echo "✅ Success! PRP generated and saved to: $OUTPUT"
