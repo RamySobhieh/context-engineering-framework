@@ -1,0 +1,23 @@
+{
+  "name": "create-context-engineering-app",
+  "version": "1.0.0",
+  "description": "Create a new context engineering project",
+  "main": "index.js",
+  "bin": {
+    "create-context-engineering-app": "./index.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "context-engineering",
+    "cli"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fs-extra": "^10.0.0",
+    "yargs": "^17.3.1"
+  },
+  "type": "commonjs"
+}
