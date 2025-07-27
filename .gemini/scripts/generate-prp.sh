@@ -74,7 +74,7 @@ JSON_PAYLOAD=$(jq -n \
                   }')
 
 # Make the API call using curl
-API_RESPONSE=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-latest:generateContent?key=${GEMINI_API_KEY}" \
+API_RESPONSE=$(curl -s -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}" \
 -H "Content-Type: application/json" \
 -d "$JSON_PAYLOAD")
 
